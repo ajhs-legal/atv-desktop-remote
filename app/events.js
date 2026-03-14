@@ -411,38 +411,39 @@ function handleDarkMode() {
 }
 
 /**
- * Setup tray context menu
+ * Setup context menu (window right-click)
  */
 function setupContextMenu() {
-    if (!mb || !Menu) return;
+    if (!Menu) return;
 
-    const tray = mb.tray;
-    const mode = localStorage.getItem('uimode') || 'systemmode';
+    const buildMenu = () => {
+        const mode = localStorage.getItem('uimode') || 'systemmode';
 
-    const subMenu = Menu.buildFromTemplate([
-        { type: 'checkbox', id: 'systemmode', click: (e) => setUIMode(e), label: 'Follow system settings', checked: mode === 'systemmode' },
-        { type: 'checkbox', id: 'darkmode', click: (e) => setUIMode(e), label: 'Dark mode', checked: mode === 'darkmode' },
-        { type: 'checkbox', id: 'lightmode', click: (e) => setUIMode(e), label: 'Light mode', checked: mode === 'lightmode' }
-    ]);
+        const subMenu = Menu.buildFromTemplate([
+            { type: 'checkbox', id: 'systemmode', click: (e) => setUIMode(e), label: 'Follow system settings', checked: mode === 'systemmode' },
+            { type: 'checkbox', id: 'darkmode', click: (e) => setUIMode(e), label: 'Dark mode', checked: mode === 'darkmode' },
+            { type: 'checkbox', id: 'lightmode', click: (e) => setUIMode(e), label: 'Light mode', checked: mode === 'lightmode' }
+        ]);
 
-    const topChecked = JSON.parse(localStorage.getItem('alwaysOnTopChecked') || 'false');
+        const topChecked = JSON.parse(localStorage.getItem('alwaysOnTopChecked') || 'false');
 
-    const contextMenu = Menu.buildFromTemplate([
-        { type: 'checkbox', label: 'Always on-top', click: toggleAlwaysOnTop, checked: topChecked },
-        { type: 'separator' },
-        { role: 'about', label: 'About' },
-        { type: 'separator' },
-        { label: 'Appearance', submenu: subMenu },
-        { label: 'Change hotkey', click: () => ipcRenderer.invoke('loadHotkeyWindow') },
-        { type: 'separator' },
-        { label: 'Clear saved data', click: clearSavedData },
-        { type: 'separator' },
-        { label: 'Quit', click: () => remote.app.quit() }
-    ]);
+        return Menu.buildFromTemplate([
+            { type: 'checkbox', label: 'Always on-top', click: toggleAlwaysOnTop, checked: topChecked },
+            { type: 'separator' },
+            { role: 'about', label: 'About' },
+            { type: 'separator' },
+            { label: 'Appearance', submenu: subMenu },
+            { label: 'Change hotkey', click: () => ipcRenderer.invoke('loadHotkeyWindow') },
+            { type: 'separator' },
+            { label: 'Clear saved data', click: clearSavedData },
+            { type: 'separator' },
+            { label: 'Quit', click: () => remote.app.quit() }
+        ]);
+    };
 
-    tray.removeAllListeners('right-click');
-    tray.on('right-click', () => {
-        mb.tray.popUpContextMenu(contextMenu);
+    window.addEventListener('contextmenu', (e) => {
+        e.preventDefault();
+        buildMenu().popup();
     });
 }
 
