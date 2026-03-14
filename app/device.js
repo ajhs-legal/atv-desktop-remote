@@ -15,6 +15,9 @@ let connection = null;
 let pairingSession = null;
 let pairingDevice = null;
 
+// Cache of last scan results so startPair doesn't need a second mDNS scan
+let lastScannedDevices = [];
+
 // Retry configuration
 const CONNECT_RETRY_DELAY = 1000; // ms between retries
 
@@ -26,6 +29,7 @@ const CONNECT_RETRY_DELAY = 1000; // ms between retries
 async function scan(timeout = 5000) {
     try {
         const devices = await atvjs.scan(timeout);
+        lastScannedDevices = devices;
         return devices.map(d => `${d.name} (${d.address})`);
     } catch (err) {
         console.error('Scan error:', err);
@@ -46,12 +50,29 @@ async function startPair(deviceString) {
     }
     const ip = match[1];
 
-    // Scan to get full device info
-    const devices = await atvjs.scan(5000);
-    const device = devices.find(d => d.address === ip);
+    // Try cached scan results first to avoid an extra 5-second mDNS scan.
+    // Fall back to a fresh scan only when the device isn't in the cache.
+    let device = lastScannedDevices.find(d => d.address === ip);
     if (!device) {
-        throw new Error('Device not found');
+        const devices = await atvjs.scan(5000);
+        lastScannedDevices = devices;
+        device = devices.find(d => d.address === ip);
+        if (!device) {
+            throw new Error('Device not found');
+        }
     }
+
+    // Close any stale pairing connection so getCompanionPairingConnection
+    // creates a fresh TCP socket instead of reusing one in a bad state.
+    if (pairingSession && pairingSession._companionProtocol) {
+        try {
+            pairingSession._companionProtocol.connection.close();
+        } catch (e) {
+            // ignore errors on close
+        }
+    }
+    pairingSession = null;
+    pairingDevice = null;
 
     pairingDevice = device;
 

@@ -97,8 +97,9 @@ function showPairingView(data = {}) {
     $('#loader').hide();
     $('#pairingElements').show();
     $('#results').hide();
-    $('#pairCodeElements').show();
-    $('#pairCode').val('').focus();
+    // Keep #pairCodeElements hidden initially; events.js shows it once
+    // startPair completes and the Apple TV is displaying the PIN.
+    $('#pairCodeElements').hide();
     $('#pairStepNum').html('1');
     $('#pairProtocolName').html('Companion');
 }
