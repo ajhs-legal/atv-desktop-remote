@@ -4,9 +4,28 @@
     "main": "app/main.js",
     "description": "ATV Remote",
     "productName": "ATV Remote",
+    "license": "MIT",
     "build": {
         "productName": "ATV Remote",
         "appId": "com.electron.atvMacRemote",
+        "linux": {
+            "target": [
+                "AppImage",
+                "pacman"
+            ],
+            "category": "Utility",
+            "icon": "build/icon.png",
+            "executableName": "atv-desktop-remote",
+            "maintainer": "Brian Harper <3291225+bsharper@users.noreply.github.com>",
+            "vendor": "Brian Harper"
+        },
+        "appImage": {
+            "artifactName": "atv-desktop-remote-${version}-${arch}.${ext}"
+        },
+        "pacman": {
+            "packageName": "atv-desktop-remote",
+            "artifactName": "atv-desktop-remote-${version}.${ext}"
+        },
         "mac": {
             "category": "public.app-category.utilities",
             "hardenedRuntime": true,
@@ -22,6 +41,7 @@
         "clean": "npx rimraf node_modules app/node_modules",
         "reset": "npm run clean && npm install --legacy-peer-deps",
         "build": "npx electron-builder -m",
+        "build:linux": "npx electron-builder -l",
         "docker-build": "./electron_docker.sh 'npm run build:win'",
         "build:win": "npx electron-builder -w",
         "build-arm": "npx electron-builder -m --arm64"

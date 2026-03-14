@@ -7,8 +7,8 @@
         "start": "cd .. && npx electron app/main.js"
     },
     "keywords": [],
-    "author": "",
-    "license": "ISC",
+    "author": "Brian Harper <3291225+bsharper@users.noreply.github.com>",
+    "license": "MIT",
     "main": "main.js",
     "dependencies": {
         "@electron/remote": "^2.1.2",
