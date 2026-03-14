@@ -15,6 +15,9 @@ let connection = null;
 let pairingSession = null;
 let pairingDevice = null;
 
+// Cache of last scan results so startPair doesn't need a second mDNS scan
+let lastScannedDevices = [];
+
 // Retry configuration
 const CONNECT_RETRY_DELAY = 1000; // ms between retries
 
@@ -26,6 +29,7 @@ const CONNECT_RETRY_DELAY = 1000; // ms between retries
 async function scan(timeout = 5000) {
     try {
         const devices = await atvjs.scan(timeout);
+        lastScannedDevices = devices;
         return devices.map(d => `${d.name} (${d.address})`);
     } catch (err) {
         console.error('Scan error:', err);
@@ -46,12 +50,29 @@ async function startPair(deviceString) {
     }
     const ip = match[1];
 
-    // Scan to get full device info
-    const devices = await atvjs.scan(5000);
-    const device = devices.find(d => d.address === ip);
+    // Try cached scan results first to avoid an extra 5-second mDNS scan.
+    // Fall back to a fresh scan only when the device isn't in the cache.
+    let device = lastScannedDevices.find(d => d.address === ip);
     if (!device) {
-        throw new Error('Device not found');
+        const devices = await atvjs.scan(5000);
+        lastScannedDevices = devices;
+        device = devices.find(d => d.address === ip);
+        if (!device) {
+            throw new Error('Device not found');
+        }
     }
+
+    // Close any stale pairing connection so getCompanionPairingConnection
+    // creates a fresh TCP socket instead of reusing one in a bad state.
+    if (pairingSession && pairingSession._companionProtocol) {
+        try {
+            pairingSession._companionProtocol.connection.close();
+        } catch (e) {
+            // ignore errors on close
+        }
+    }
+    pairingSession = null;
+    pairingDevice = null;
 
     pairingDevice = device;
 
@@ -263,10 +284,29 @@ async function connect(credentials, isRetry = false) {
  * @param {Object} credentials
  */
 async function connectWithRetry(credentials) {
+    // Bail out if state has changed away from CONNECTING.  This stops zombie
+    // calls (spawned before a SCANNING or PAIRING transition) from corrupting
+    // the new state by emitting unexpected state transitions.
+    if (appState.state !== States.CONNECTING) {
+        return;
+    }
+
     try {
         await connect(credentials);
+
+        // Check again: if something changed state while connect() was awaited
+        // (e.g. a concurrent call already transitioned to SCANNING), stop here.
+        if (appState.state !== States.CONNECTING) {
+            return;
+        }
+
         appState.transition(States.CONNECTED);
     } catch (err) {
+        // If state changed while connect() was in flight, abandon this call.
+        if (appState.state !== States.CONNECTING) {
+            return;
+        }
+
         console.error('Connection failed:', err.message);
 
         if (appState.shouldRetryConnection()) {

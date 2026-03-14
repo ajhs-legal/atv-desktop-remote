@@ -335,10 +335,15 @@ function restartPairing() {
         console.log('Restarting pairing for:', deviceName);
         // Small delay to let user see the error message
         setTimeout(() => {
+            // Hide PIN input while reconnecting.
+            $('#pairCodeElements').hide();
+            views.setStatus('Reconnecting, please wait\u2026');
+
             device.startPair(deviceName)
                 .then(() => {
                     console.log('Pairing restarted successfully');
-                    views.setStatus('Enter the new PIN shown on your TV.');
+                    $('#pairCodeElements').show();
+                    views.setStatus('Enter the new PIN shown on your Apple TV.');
                     $('#pairCode').val('').focus();
                 })
                 .catch(err => {
@@ -511,15 +516,30 @@ appState.on(States.PAIRING_1, (data) => {
     setupPairingHandlers();
 
     if (data.device) {
-        device.startPair(data.device).catch(err => {
-            console.error('Start pairing failed:', err);
-            views.setStatus('Could not start pairing.');
-        });
+        // Hide PIN input while we connect and prompt the Apple TV to show the code.
+        $('#pairCodeElements').hide();
+        views.setStatus('Connecting, please wait\u2026');
+
+        device.startPair(data.device)
+            .then(() => {
+                // Apple TV is now showing the PIN – reveal the entry form.
+                $('#pairCodeElements').show();
+                views.setStatus('Enter the PIN shown on your Apple TV.');
+                $('#pairCode').val('').focus();
+            })
+            .catch(err => {
+                console.error('Start pairing failed:', err);
+                views.setStatus('Could not start pairing. Please try again.');
+            });
     }
 });
 
-appState.on(States.CONNECTING, (data) => {
-    if (data.credentials) {
+// Only start a fresh connectWithRetry when entering CONNECTING from a different
+// state. CONNECTING → CONNECTING transitions are internal retries managed by
+// connectWithRetry itself; spawning a new call for those would create
+// exponentially growing parallel attempts.
+appState.on('change', ({ oldState, newState, data }) => {
+    if (newState === States.CONNECTING && oldState !== States.CONNECTING && data.credentials) {
         device.connectWithRetry(data.credentials).catch(err => {
             console.error('Connection failed after retries');
             // State machine already transitioned to SCANNING
