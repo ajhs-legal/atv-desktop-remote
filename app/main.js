@@ -3,7 +3,6 @@ var win;
 const { ipcMain } = require('electron')
 const path = require('path');
 require('@electron/remote/main').initialize()
-const menubar = require('menubar').menubar;
 const util = require('util');
 var secondWindow;
 process.env['MYPATH'] = path.join(process.env.APPDATA || (process.platform == 'darwin' ? process.env.HOME + '/Library/Application Support' : process.env.HOME + "/.local/share"), "ATV Remote");
@@ -12,17 +11,12 @@ const fs = require('fs');
 
 // No longer using Python server - atvjs communicates directly
 
-const preloadWindow = true;
-const readyEvent = preloadWindow ? "ready" : "after-create-window";
+var handleVolumeButtonsGlobal = false;
+
+var kbHasFocus;
 
 const volumeButtons = ['VolumeUp', 'VolumeDown', 'VolumeMute']
 
-var handleVolumeButtonsGlobal = false;
-
-var mb;
-var kbHasFocus;
-
-console._log = console.log;
 console.log = function() {
     let txt = util.format(...[].slice.call(arguments)) + '\n'
     process.stdout.write(txt);
@@ -84,7 +78,7 @@ function createInputWindow() {
         showWindowThrottle();
     });
     secondWindow.on("blur", () => {
-        if (mb.window.isAlwaysOnTop()) return;
+        if (win && win.isAlwaysOnTop()) return;
         showWindowThrottle();
     })
     secondWindow.setMenu(null);
@@ -92,112 +86,107 @@ function createInputWindow() {
 }
 
 function createWindow() {
-    mb = menubar({
-        preloadWindow: preloadWindow,
-        showDockIcon: false,
-        browserWindow: {
-            width: 300,
-            height: 500,
-            alwaysOnTop: false,
-            webPreferences: {
-                nodeIntegration: true,
-                enableRemoteModule: true,
-                contextIsolation: false
-            }
+    win = new BrowserWindow({
+        width: 300,
+        height: 500,
+        alwaysOnTop: false,
+        webPreferences: {
+            nodeIntegration: true,
+            enableRemoteModule: true,
+            contextIsolation: false
         }
+    });
+    require("@electron/remote/main").enable(win.webContents);
+    win.loadFile('index.html');
+    win.setMenu(null);
+    createInputWindow();
+
+    win.on('close', () => {
+        console.log('window closed, quitting')
+        app.exit();
     })
-    global['MB'] = mb;
-    mb.on(readyEvent, () => {
-        require("@electron/remote/main").enable(mb.window.webContents);
-        win = mb.window;
-       
-        var webContents = win.webContents;
-        createInputWindow()
-       
+    win.on('show', () => {
+        win.webContents.send('shortcutWin');
+        if (handleVolumeButtonsGlobal) handleVolume();
+    })
+    win.on('minimize', () => {
+        if (handleVolumeButtonsGlobal) unhandleVolume();
+    })
+    win.on('restore', () => {
+        win.webContents.send('shortcutWin');
+        if (handleVolumeButtonsGlobal) handleVolume();
+    })
 
-        win.on('close', () => {
-            console.log('window closed, quitting')
-            app.exit();
-        })
-        win.on('show', () => {
-            win.webContents.send('shortcutWin');
-            if (handleVolumeButtonsGlobal) handleVolume();
-        })
+    win.webContents.on('will-navigate', (e, url) => {
+        console.log(`will-navigate`, url);
+    })
+    ipcMain.on('input-change', (event, data) => {
+        console.log('Received input:', data);
+        win.webContents.send('input-change', data);
+    });
+    ipcMain.handle("loadHotkeyWindow", (event) => {
+        createHotkeyWindow();
+    })
+    ipcMain.handle('debug', (event, arg) => {
+        console.log(`ipcDebug: ${arg}`)
+    })
+    ipcMain.handle('quit', event => {
+        app.exit()
+    });
+    ipcMain.handle('alwaysOnTop', (event, arg) => {
+        var tf = arg === "true";
+        console.log(`setting alwaysOnTop: ${tf}`)
+        win.setAlwaysOnTop(tf);
+    })
+    ipcMain.handle('uimode', (event, arg) => {
+        secondWindow.webContents.send('uimode', arg);
+    });
 
-        win.on('hide', () => {
-            if (handleVolumeButtonsGlobal) unhandleVolume();
-        })
+    ipcMain.handle('hideWindow', (event) => {
+        console.log('minimizing window');
+        win.minimize();
+    });
+    ipcMain.handle('showWindow', (event) => {
+        showWindow();
+    });
+    ipcMain.handle('isProduction', (event) => {
+        return (!process.defaultApp);
+    });
+    ipcMain.handle('isWSRunning', (event, arg) => {
+        console.log('isWSRunning');
+        // atvjs bridge is always ready - no server needed
+        win.webContents.send('wsserver_started')
+    })
+    
+    ipcMain.handle('closeInputOpenRemote', (event, arg) => {
+        console.log('closeInputOpenRemote');
+        showWindow();
+    })
+    ipcMain.handle('openInputWindow', (event, arg) => {
+        console.log('openInputWindow');
+        secondWindow.show();
+        secondWindow.webContents.send('openInputWindow');
+    });
+    ipcMain.handle('current-text', (event, arg) => {
+        console.log('current-text', arg);
+        secondWindow.webContents.send('current-text', arg);
+    });
+    ipcMain.handle('kbfocus-status', (event, arg) => {
+        secondWindow.webContents.send('kbfocus-status', arg);
+        kbHasFocus = arg;
+    })
+    ipcMain.handle('kbfocus', () => {
+        win.webContents.send('kbfocus');
+    })
 
-        win.webContents.on('will-navigate', (e, url) => {
-            console.log(`will-navigate`, url);
-        })
-        ipcMain.on('input-change', (event, data) => {
-            console.log('Received input:', data);
-            win.webContents.send('input-change', data);
-        });
-        ipcMain.handle("loadHotkeyWindow", (event) => {
-            createHotkeyWindow();
-        })
-        ipcMain.handle('debug', (event, arg) => {
-            console.log(`ipcDebug: ${arg}`)
-        })
-        ipcMain.handle('quit', event => {
-            app.exit()
-        });
-        ipcMain.handle('alwaysOnTop', (event, arg) => {
-            var tf = arg == "true";
-            console.log(`setting alwaysOnTop: ${tf}`)
-            mb.window.setAlwaysOnTop(tf);
-            
-        })
-        ipcMain.handle('uimode', (event, arg) => {
-            secondWindow.webContents.send('uimode', arg);
-        });
+    powerMonitor.addListener('resume', event => {
+        win.webContents.send('powerResume');
+    })
 
-
-        ipcMain.handle('hideWindow', (event) => {
-            console.log('hiding window');
-            mb.hideWindow();
-        });
-        ipcMain.handle('isProduction', (event) => {
-            return (!process.defaultApp);
-        });
-        ipcMain.handle('isWSRunning', (event, arg) => {
-            console.log('isWSRunning');
-            // atvjs bridge is always ready - no server needed
-            win.webContents.send('wsserver_started')
-        })
-        
-        ipcMain.handle('closeInputOpenRemote', (event, arg) => {
-            console.log('closeInputOpenRemote');
-            showWindow();
-        })
-        ipcMain.handle('openInputWindow', (event, arg) => {
-            console.log('openInputWindow');
-            secondWindow.show();
-            secondWindow.webContents.send('openInputWindow');
-        });
-        ipcMain.handle('current-text', (event, arg) => {
-            console.log('current-text', arg);
-            secondWindow.webContents.send('current-text', arg);
-        });
-        ipcMain.handle('kbfocus-status', (event, arg) => {
-            secondWindow.webContents.send('kbfocus-status', arg);
-            kbHasFocus = arg;
-        })
-        ipcMain.handle('kbfocus', () => {
-            win.webContents.send('kbfocus');
-        })
-
-        powerMonitor.addListener('resume', event => {
-            win.webContents.send('powerResume');
-        })
-
-        win.on('ready-to-show', () => {
-            console.log('ready to show')
-            // atvjs bridge is always ready - send started event
-            win.webContents.send("wsserver_started")
-        })
+    win.on('ready-to-show', () => {
+        console.log('ready to show')
+        // atvjs bridge is always ready - send started event
+        win.webContents.send("wsserver_started")
     })
 }
 
@@ -209,22 +198,17 @@ function showWindow() {
         //console.log(err);
         // this happens in windows, doesn't seem to affect anything though
     }
-    mb.showWindow();
+    if (win.isMinimized()) win.restore();
+    win.show();
     setTimeout(() => {
-        mb.window.focus();
+        win.focus();
     }, 200);
 }
 
 var showWindowThrottle = lodash.throttle(showWindow, 100);
 
 function hideWindow() {
-    mb.hideWindow();
-    try {
-        app.hide();
-    } catch (err) {
-        // console.log(err);
-        // not sure if this affects windows like app.show does.
-    }
+    win.minimize();
 }
 
 function getWorkingPath() {
@@ -278,7 +262,7 @@ function registerHotkeys() {
         var errs = hotkeys.map(hotkey => {
             console.log(`Registering hotkey: ${hotkey}`)
             return globalShortcut.register(hotkey, () => {
-                if (mb.window.isVisible()) {
+                if (win.isVisible() && !win.isMinimized()) {
                     hideWindow();
                 } else {
                     showWindow();
@@ -308,7 +292,7 @@ function registerHotkeys() {
     } 
     if (!registered) {
         globalShortcut.registerAll(['Super+Shift+R', 'Command+Control+R'], () => {
-            if (mb.window.isVisible()) {
+            if (win.isVisible() && !win.isMinimized()) {
                 hideWindow();
             } else {
                 showWindow();
