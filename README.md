@@ -9,7 +9,9 @@ A simple menubar app that allows you to control an Apple TV from your desktop
 
 If you have homebrew installed `brew install atv-remote`
 
-macOS and Windows versions can be downloaded from here: https://github.com/bsharper/atv-desktop-remote/releases
+macOS, Windows, and Linux release artifacts can be produced from this repository.
+
+Arch-based Linux users can also build a native package with the included `PKGBUILD` (`makepkg -si` from the repository root).
 
 
 ## Usage
@@ -35,6 +37,7 @@ macOS and Windows versions can be downloaded from here: https://github.com/bshar
 ## Building
 
 1. `electron-builder` is used to create a standalone application.
+2. `npm run build:linux` creates Linux artifacts, including AppImage and pacman packages.
 
 ## Notes
 
