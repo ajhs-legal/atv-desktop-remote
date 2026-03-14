@@ -7,7 +7,7 @@
         "start": "cd .. && npx electron app/main.js"
     },
     "keywords": [],
-    "author": "ATV Desktop Remote Contributors <noreply@example.com>",
+    "author": "Brian Harper <3291225+bsharper@users.noreply.github.com>",
     "license": "MIT",
     "main": "main.js",
     "dependencies": {

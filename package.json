@@ -16,8 +16,8 @@
             "category": "Utility",
             "icon": "build/icon.png",
             "executableName": "atv-desktop-remote",
-            "maintainer": "ATV Desktop Remote Contributors <noreply@example.com>",
-            "vendor": "ATV Desktop Remote"
+            "maintainer": "Brian Harper <3291225+bsharper@users.noreply.github.com>",
+            "vendor": "Brian Harper"
         },
         "appImage": {
             "artifactName": "atv-desktop-remote-${version}-${arch}.${ext}"
