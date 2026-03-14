@@ -534,8 +534,12 @@ appState.on(States.PAIRING_1, (data) => {
     }
 });
 
-appState.on(States.CONNECTING, (data) => {
-    if (data.credentials) {
+// Only start a fresh connectWithRetry when entering CONNECTING from a different
+// state. CONNECTING → CONNECTING transitions are internal retries managed by
+// connectWithRetry itself; spawning a new call for those would create
+// exponentially growing parallel attempts.
+appState.on('change', ({ oldState, newState, data }) => {
+    if (newState === States.CONNECTING && oldState !== States.CONNECTING && data.credentials) {
         device.connectWithRetry(data.credentials).catch(err => {
             console.error('Connection failed after retries');
             // State machine already transitioned to SCANNING

@@ -284,10 +284,29 @@ async function connect(credentials, isRetry = false) {
  * @param {Object} credentials
  */
 async function connectWithRetry(credentials) {
+    // Bail out if state has changed away from CONNECTING.  This stops zombie
+    // calls (spawned before a SCANNING or PAIRING transition) from corrupting
+    // the new state by emitting unexpected state transitions.
+    if (appState.state !== States.CONNECTING) {
+        return;
+    }
+
     try {
         await connect(credentials);
+
+        // Check again: if something changed state while connect() was awaited
+        // (e.g. a concurrent call already transitioned to SCANNING), stop here.
+        if (appState.state !== States.CONNECTING) {
+            return;
+        }
+
         appState.transition(States.CONNECTED);
     } catch (err) {
+        // If state changed while connect() was in flight, abandon this call.
+        if (appState.state !== States.CONNECTING) {
+            return;
+        }
+
         console.error('Connection failed:', err.message);
 
         if (appState.shouldRetryConnection()) {
